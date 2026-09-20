@@ -1,0 +1,23 @@
+{
+    auto_https off
+}
+
+:8080 {
+    redir https://localhost:8443{uri} permanent
+}
+
+:8443 {
+    tls internal
+    encode gzip
+
+    @api path /api/* /health /ready /docs /openapi.json
+    handle @api {
+        reverse_proxy 127.0.0.1:5058
+    }
+
+    handle {
+        root * frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
