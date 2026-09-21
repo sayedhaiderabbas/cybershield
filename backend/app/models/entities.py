@@ -29,6 +29,17 @@ class User(Base):
     audit_events: Mapped[list['SecurityEvent']] = relationship(back_populates='actor', cascade='all, delete-orphan')
 
 
+class TokenRevocation(Base):
+    __tablename__ = 'token_revocations'
+
+    id: Mapped[str] = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    jti: Mapped[str] = Column(String(36), unique=True, nullable=False, index=True)
+    user_id: Mapped[str] = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    expires_at: Mapped[datetime] = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at: Mapped[datetime] = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    reason: Mapped[str] = Column(String(100), default='logout', nullable=False)
+
+
 class Business(Base):
     __tablename__ = 'businesses'
 
