@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_request_context
 from app.db.session import get_db
-from app.models.entities import User
+from app.models.entities import TokenRevocation, User
+from app.core.security import decode_access_token, get_bearer_token
 from app.schemas import UserCreate, UserLogin, UserResponse
 from app.services.audit_service import AuditEventService
 from app.services.auth_service import AuthService
@@ -62,6 +65,14 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
 @router.post('/logout')
 def logout_user(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
     request_id = get_request_context(request)['request_id']
+    token = get_bearer_token(request.headers.get('Authorization'))
+    if token is not None:
+        payload = decode_access_token(token)
+        token_id = payload.get('jti')
+        expires_at = datetime.fromtimestamp(int(payload['exp']), tz=timezone.utc)
+        if token_id and db.query(TokenRevocation).filter(TokenRevocation.jti == token_id).first() is None:
+            db.add(TokenRevocation(jti=token_id, user_id=current_user.id, expires_at=expires_at, reason='logout'))
+            db.commit()
     AuditEventService(db).record_event(
         event_type='AUTHENTICATION',
         action='LOGOUT',
@@ -75,7 +86,7 @@ def logout_user(request: Request, db: Session = Depends(get_db), current_user: U
     )
     return {
         'data': {
-            'message': 'Logout successful. Remove the token from client storage to end the session.',
+            'message': 'Logout successful. The authentication token has been revoked server-side.',
             'user_id': current_user.id,
         }
     }
