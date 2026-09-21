@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.errors import AuthenticationFailedError, AuthenticationRequiredError, AuthorizationDeniedError
 from app.core.security import decode_access_token, get_bearer_token
 from app.db.session import get_db
-from app.models.entities import User
+from app.models.entities import TokenRevocation, User
 
 
 def get_request_context(request: Request) -> Dict[str, Any]:
@@ -37,6 +37,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
         if payload.get('type') != 'access':
             raise AuthorizationDeniedError('Invalid token type.')
+
+        token_id = payload.get('jti')
+        if not token_id:
+            raise AuthenticationFailedError('Invalid authentication token.')
+
+        revoked = db.query(TokenRevocation).filter(TokenRevocation.jti == token_id).first()
+        if revoked is not None:
+            raise AuthenticationFailedError('Authentication session has been revoked.')
 
         user = db.get(User, user_id)
         if user is None:
